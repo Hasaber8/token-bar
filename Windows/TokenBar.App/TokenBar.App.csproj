@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>TokenBar</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../TokenBar.Core/TokenBar.Core.csproj" /></ItemGroup>
+</Project>

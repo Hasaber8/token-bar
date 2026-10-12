@@ -4,6 +4,13 @@ The `Daily pricing release` workflow checks models.dev every day. A changed cata
 
 Tags pushed manually are handled by the `GitHub release` workflow, which publishes a matching GitHub Release with generated notes. Automated pricing releases publish directly because GitHub does not start tag-push workflows for tags created with `GITHUB_TOKEN`.
 
+Both release paths call the `Windows build` workflow to test the Windows scanner,
+build portable x64 and ARM64 ZIPs, and attach them to the release. CI also builds
+both architectures and runs the x64 dashboard/CLI smoke checks. ARM64 builds are
+cross-published on an x64 runner; native ARM64 execution is not covered by CI.
+To retry missing Windows assets, run `Windows build` manually with the release
+tag as `ref` and enable `publish-release`. Local Windows builds use `./build.ps1`.
+
 ## One-time tap trigger setup
 
 Create a fine-grained personal access token scoped only to `shrivara/homebrew-tap`, with **Actions: read and write**, then add it to this repository as the `TAP_WORKFLOW_TOKEN` Actions secret:

@@ -1,3 +1,6 @@
 .build/
-TokenBar.app/
-ClaudeUsage.app/
+/TokenBar.app/
+/ClaudeUsage.app/
+**/bin/
+**/obj/
+dist/

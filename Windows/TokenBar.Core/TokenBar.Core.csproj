@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <EmbeddedResource Include="../../Sources/TokenBarCore/Resources/model-pricing.json" LogicalName="model-pricing.json" />
+  </ItemGroup>
+</Project>

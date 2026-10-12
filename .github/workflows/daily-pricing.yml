@@ -48,6 +48,8 @@ jobs:
     if: needs.check.outputs.changed == 'true'
     runs-on: macos-15
     timeout-minutes: 15
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     permissions:
       contents: write
     steps:
@@ -113,3 +115,12 @@ jobs:
             --repo shrivara/homebrew-tap \
             --ref main
           echo "Triggered the Homebrew tap sync." >> "$GITHUB_STEP_SUMMARY"
+
+  windows:
+    needs: release
+    uses: ./.github/workflows/windows-build.yml
+    permissions:
+      contents: write
+    with:
+      ref: v${{ needs.release.outputs.version }}
+      publish-release: true

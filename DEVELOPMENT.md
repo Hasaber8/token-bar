@@ -1,6 +1,7 @@
 # Development
 
-Requires macOS 14+ and the Xcode Command Line Tools.
+The macOS app requires macOS 14+ and the Xcode Command Line Tools. The native
+Windows port requires the .NET 10 SDK; see [Windows development](Windows/README.md#build-and-test).
 
 ## Build from source
 

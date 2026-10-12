@@ -1,12 +1,12 @@
 # token-bar
 
-A macOS menu bar app for local AI usage: spend, input/output tokens, and cache hit rate.
+A macOS menu bar and Windows system tray app for local AI usage: spend, input/output tokens, and cache hit rate.
 
 <p align="center">
   <img src="docs/screenshot.png" width="425" alt="Token Bar panel showing yearly spend, token usage, cache hit rate, a spend graph, and per-model breakdowns">
 </p>
 
-Left-click opens a transient, scrollable dashboard popover with day, week, month, or year totals, a spend graph, model breakdowns, and screenshots. Right-click keeps a native command menu for menu bar metrics, panel display options, color themes, calendar or relative period ranges, and quit.
+On macOS, left-click opens a transient, scrollable dashboard popover with day, week, month, or year totals, a spend graph, model breakdowns, and screenshots. Right-click keeps a native command menu for menu bar metrics, panel display options, color themes, calendar or relative period ranges, and quit.
 
 System follows the macOS appearance. Built-in dark themes include Catppuccin Mocha, Dracula, Gruvbox Dark, Nord, Solarized Dark, and Tokyo Night; light themes include Catppuccin Latte, GitHub Light, Gruvbox Light, and Solarized Light.
 
@@ -23,7 +23,20 @@ An experimental **Projects & Sessions** panel groups usage across agents by Git 
 
 Token Bar watches these sources for changes and refreshes immediately, with a 60-second fallback.
 
-## Homebrew
+## Windows
+
+Build the native Windows tray app with the [.NET 10 SDK](https://learn.microsoft.com/en-us/dotnet/core/install/windows):
+
+```powershell
+.\build.ps1
+.\dist\TokenBar-win-x64\TokenBar.exe
+```
+
+The portable build includes its runtime. Left-click the tray icon for the
+dashboard and right-click for settings. See [Windows setup and feature coverage](Windows/README.md)
+for data paths, diagnostics, ARM64 builds, and tests.
+
+## Homebrew (macOS)
 
 ### Install
 

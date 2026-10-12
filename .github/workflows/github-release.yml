@@ -9,6 +9,12 @@ permissions:
   contents: write
 
 jobs:
+  windows:
+    needs: release
+    uses: ./.github/workflows/windows-build.yml
+    with:
+      ref: ${{ github.ref_name }}
+      publish-release: true
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 5
