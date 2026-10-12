@@ -20,11 +20,10 @@ on:
         type: boolean
         default: false
 
-permissions:
-  contents: read
-
 jobs:
   build:
+    permissions:
+      contents: read
     runs-on: windows-latest
     timeout-minutes: 20
     strategy:
@@ -64,8 +63,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions:
-      contents: write
+    # Inherit the caller's permissions: release callers grant contents: write,
+    # while CI grants contents: read and skips this job.
     steps:
       - uses: actions/download-artifact@v8
         with:
