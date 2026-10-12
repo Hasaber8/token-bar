@@ -47,11 +47,18 @@ jobs:
         if: matrix.runtime == 'win-x64'
         shell: pwsh
         run: |
-          $app = Start-Process -FilePath ./dist/TokenBar-win-x64/TokenBar.exe -ArgumentList '--smoke-test' -WindowStyle Hidden -PassThru
+          $app = Start-Process -FilePath ./dist/TokenBar-win-x64/TokenBar.exe -ArgumentList @('--smoke-test', '.build/dashboard.png') -WindowStyle Hidden -PassThru
           if (!$app.WaitForExit(30000)) { $app.Kill(); throw 'Dashboard smoke check timed out' }
           if ($app.ExitCode -ne 0) { throw 'Dashboard smoke check failed' }
           ./dist/TokenBar-win-x64/token-bar-cli.exe --home "$env:RUNNER_TEMP/empty-profile" --json
           if ($LASTEXITCODE -ne 0) { throw 'CLI smoke check failed' }
+      - name: Save dashboard previews
+        if: always() && matrix.runtime == 'win-x64'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Windows-dashboard-previews
+          path: .build/dashboard*.png
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v7
         with:
           name: TokenBar-${{ matrix.runtime }}

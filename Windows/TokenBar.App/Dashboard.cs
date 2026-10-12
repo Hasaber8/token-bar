@@ -6,14 +6,22 @@ namespace TokenBar.App;
 internal sealed class Dashboard : Form
 {
     private readonly Settings settings;
-    private readonly FlowLayoutPanel content = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
-        WrapContents = false, AutoScroll = true, Padding = new Padding(20) };
-    private readonly Label status = new() { Dock = DockStyle.Bottom, Height = 40, Padding = new Padding(20, 8, 20, 0), AutoEllipsis = true };
+    private readonly FlowLayoutPanel content = new()
+    {
+        Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false,
+        AutoScroll = true
+    };
+    private readonly Label status = new()
+    {
+        Dock = DockStyle.Bottom, Height = 42, Padding = new Padding(24, 12, 24, 0), AutoEllipsis = true
+    };
+    private readonly Dictionary<(float Size, bool Bold), Font> fonts = [];
+    private readonly ToolTip tooltips = new();
     private SourceStats[] sources = [];
     private ReportingRange range;
     private Palette palette;
-    private readonly Dictionary<(float Size, bool Bold), Font> labelFonts = [];
     public event EventHandler? SettingsChanged;
+    public event EventHandler? RefreshRequested;
 
     public Dashboard(Settings settings)
     {
@@ -22,184 +30,307 @@ internal sealed class Dashboard : Form
         palette = Palette.For(settings.Theme);
         Text = "Token Bar";
         Icon = SystemIcons.Application;
-        Font = new Font("Segoe UI", 10);
-        ClientSize = new Size(640, 650);
-        MinimumSize = new Size(560, 400);
+        AutoScaleMode = AutoScaleMode.None;
+        Font = UiFont(9.5f);
+        _ = Handle; // Establish the actual display DPI before sizing controls.
+        ClientSize = new Size(S(640), S(700));
+        MinimumSize = new Size(S(600), S(420));
+        MaximizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.Manual;
-        Controls.Add(content); Controls.Add(status);
+        SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
+        Controls.Add(content);
+        Controls.Add(status);
         FormClosing += (_, e) => { if (e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; Hide(); } };
-        Resize += (_, _) => ResizeContent();
+        content.ClientSizeChanged += (_, _) => ResizeContent();
+        DpiChanged += (_, _) => { MinimumSize = new Size(S(600), S(420)); ApplySettings(); };
         ApplySettings();
     }
-    public void SetStatus(string text) => status.Text = text;
+
+    private int S(int value) => (int)Math.Round(value * DeviceDpi / 96.0);
+    private Font UiFont(float size, bool bold = false)
+    {
+        if (!fonts.TryGetValue((size, bold), out var font))
+            fonts[(size, bold)] = font = new Font("Segoe UI", size, bold ? FontStyle.Bold : FontStyle.Regular);
+        return font;
+    }
+    private Label TextLabel(string text, float size = 9.5f, bool bold = false, bool muted = false) => new()
+    {
+        Text = text, AutoSize = true, Font = UiFont(size, bold), ForeColor = muted ? palette.Muted : palette.Text,
+        BackColor = Color.Transparent, Margin = Padding.Empty
+    };
+    private RoundedCard Card(int height) => new(palette) { Height = S(height), Margin = new Padding(0, 0, 0, S(10)) };
+    public void SetStatus(string text) { status.Text = text; tooltips.SetToolTip(status, text); }
     public void ApplySettings()
     {
         palette = Palette.For(settings.Theme);
         BackColor = content.BackColor = status.BackColor = palette.Background;
-        ForeColor = status.ForeColor = palette.Muted;
+        status.ForeColor = palette.Muted;
+        status.Font = UiFont(8.5f);
+        status.Height = S(34);
+        status.Padding = new Padding(S(20), S(8), S(20), 0);
+        content.Padding = new Padding(S(20), S(16), S(20), S(12));
         Render();
     }
     public void UpdateUsage(SourceStats[] value, ReportingRange reportingRange)
     {
-        sources = value; range = reportingRange; Render();
+        sources = value;
+        range = reportingRange;
+        Render();
         var errors = sources.Where(s => s.Error is not null).Select(s => s.Name + ": " + s.Error).ToArray();
-        status.Text = errors.Length > 0 ? string.Join("; ", errors) : $"Updated {DateTime.Now:t} · API-equivalent spend · ~ estimated price";
+        SetStatus(errors.Length > 0 ? string.Join("; ", errors) : $"Updated {DateTime.Now:t}  ·  All data stays on this device");
     }
-    private Font LabelFont(float size, bool bold)
-    {
-        if (!labelFonts.TryGetValue((size, bold), out var font))
-            labelFonts[(size, bold)] = font = new Font(Font.FontFamily, size, bold ? FontStyle.Bold : FontStyle.Regular);
-        return font;
-    }
-    private Label Label(string text, float size = 10, bool bold = false, bool muted = false) => new()
-    {
-        Text = text, AutoSize = true, Font = LabelFont(size, bold),
-        ForeColor = muted ? palette.Muted : palette.Text, Margin = new Padding(0, 0, 0, 12)
-    };
+
     private void Render()
     {
+        var scroll = -content.AutoScrollPosition.Y;
         content.SuspendLayout();
         foreach (Control old in content.Controls.Cast<Control>().ToArray()) { content.Controls.Remove(old); old.Dispose(); }
-        content.Controls.Add(Label("Token Bar", 20, true));
-        var options = new FlowLayoutPanel { AutoSize = true, WrapContents = true, Margin = new Padding(0, 0, 0, 18) };
-        foreach (var period in Enum.GetValues<UsagePeriod>())
-        {
-            var button = new Button { Text = period.ToString(), AutoSize = true, FlatStyle = FlatStyle.Flat,
-                BackColor = period == settings.Period ? palette.Surface : palette.Background,
-                ForeColor = period == settings.Period ? palette.Accent : palette.Text, Margin = new Padding(0, 0, 6, 0) };
-            button.Click += (_, _) => { settings.Period = period; SettingsChanged?.Invoke(this, EventArgs.Empty); Render(); };
-            options.Controls.Add(button);
-        }
-        var relative = new CheckBox { Text = "Relative range", AutoSize = true, Checked = settings.Relative,
-            ForeColor = palette.Text, Margin = new Padding(8, 6, 0, 0) };
-        relative.CheckedChanged += (_, _) => { settings.Relative = relative.Checked; SettingsChanged?.Invoke(this, EventArgs.Empty); };
-        options.Controls.Add(relative); content.Controls.Add(options);
 
-        // Leave the last snapshot labelled with its actual date interval until
-        // the asynchronous scan for the newly selected period completes.
-        content.Controls.Add(Label($"{range.Start.LocalDateTime:MMM d, yyyy} – {range.End.LocalDateTime.AddDays(-1):MMM d, yyyy}", muted: true));
-        var total = sources.Aggregate(new Usage(), (a, s) => a + s.Total);
+        var header = new Panel { Height = S(34), Margin = new Padding(0, 0, 0, S(10)) };
+        var title = TextLabel("Token Bar", 18, true);
+        title.Location = Point.Empty;
+        var subtitle = TextLabel("LOCAL AI USAGE", 8, muted: true);
+        var refresh = new PillButton("Refresh", palette, false) { Size = new Size(S(82), S(32)), Font = UiFont(9) };
+        refresh.Click += (_, _) => RefreshRequested?.Invoke(this, EventArgs.Empty);
+        tooltips.SetToolTip(refresh, "Refresh local usage now");
+        header.Controls.AddRange([title, subtitle, refresh]);
+        header.Resize += (_, _) =>
+        {
+            refresh.Location = new Point(header.Width - refresh.Width, 0);
+            subtitle.Location = new Point(Math.Max(title.Right + S(14), header.Width - refresh.Width - subtitle.Width - S(18)), S(11));
+            subtitle.Visible = header.Width > S(510);
+        };
+        content.Controls.Add(header);
+        content.Controls.Add(PeriodControls());
+
+        var total = sources.Aggregate(new Usage(), (a, source) => a + source.Total);
         var estimated = sources.Any(s => s.EstimatedPricing.Count > 0);
-        content.Controls.Add(Label((estimated ? "~" : "") + Format.Money(total.Cost), 30, true));
-        content.Controls.Add(Label($"{Format.Tokens(total.Input)} input    {Format.Tokens(total.Output)} output    {total.HitRate:P0} cache hit", 12));
-
-        if (sources.Length == 0) content.Controls.Add(Label("Loading local usage…", muted: true));
-        else if (!sources.Any(s => s.PerModel.Count > 0))
+        var summary = Card(110);
+        var caption = TextLabel("API-equivalent spend", 9, muted: true);
+        caption.Location = new Point(S(18), S(14));
+        var amount = TextLabel((estimated ? "~" : "") + Format.Money(total.Cost), 30, true);
+        amount.Location = new Point(S(15), S(32));
+        var date = TextLabel(DateCaption(), 9, muted: true);
+        var activeCount = sources.Count(s => s.PerModel.Count > 0);
+        var activity = TextLabel(sources.Length == 0 ? "Reading local usage…" :
+            $"{activeCount} active {(activeCount == 1 ? "agent" : "agents")}", 8.5f, muted: true);
+        activity.Location = new Point(S(18), S(87));
+        var pricing = TextLabel(estimated ? "Includes estimated prices" : "Bundled model pricing", 8.5f, muted: true);
+        tooltips.SetToolTip(pricing, "Spend uses API-equivalent rates, not subscription billing. ~ marks estimates or unavailable prices.");
+        summary.Controls.AddRange([caption, amount, date, activity, pricing]);
+        summary.Resize += (_, _) =>
         {
-            content.Controls.Add(Label("No usage recorded in this period", 12, true));
-            content.Controls.Add(Label("Looking for Claude Code, Codex, OpenCode, and pi logs\nin your Windows user profile. WSL logs need a separate scan.", muted: true));
-        }
+            date.Location = new Point(summary.Width - date.Width - S(18), S(15));
+            pricing.Location = new Point(summary.Width - pricing.Width - S(18), S(87));
+        };
+        content.Controls.Add(summary);
+        content.Controls.Add(Metrics(total));
+
         if (settings.ShowGraph)
         {
             var values = new double[range.Labels.Length];
             foreach (var source in sources)
                 for (var i = 0; i < Math.Min(values.Length, source.Buckets.Length); i++) values[i] += source.Buckets[i];
-            content.Controls.Add(new SpendGraph(values, range.Labels, palette) { Height = 150, Margin = new Padding(0, 8, 0, 20) });
+            content.Controls.Add(new SpendGraph(values, range, palette, UiFont(10, true), UiFont(8.5f))
+                { Height = S(160), Margin = new Padding(0, 0, 0, S(10)), AccessibleName = "Spend over time" });
         }
+
         foreach (var source in sources.Where(s => s.PerModel.Count > 0))
         {
-            content.Controls.Add(Label(source.Name, 12, true));
-            var grid = Grid("Model", "Spend", "Input", "Output", "Hit");
-            foreach (var (model, usage) in source.PerModel.OrderByDescending(pair => pair.Value.Cost))
-                grid.Rows.Add(model, (source.EstimatedPricing.Contains(model) ? "~" : "") + Format.Money(usage.Cost),
-                    Format.Tokens(usage.Input), Format.Tokens(usage.Output), usage.HitRate.ToString("P0"));
-            FitGrid(grid); content.Controls.Add(grid);
+            var rows = source.PerModel.OrderByDescending(pair => pair.Value.Cost).Select(pair =>
+            {
+                var slash = pair.Key.IndexOf('/');
+                var model = slash > 0 ? pair.Key[(slash + 1)..] : pair.Key;
+                var provider = slash > 0 ? pair.Key[..slash] : "anthropic";
+                var usage = pair.Value;
+                return new UsageRow([model, (source.EstimatedPricing.Contains(pair.Key) ? "~" : "") + Format.Money(usage.Cost),
+                    Format.Tokens(usage.Input), Format.Tokens(usage.Output), usage.HitRate.ToString("P0")],
+                    ProviderName(provider), pair.Key);
+            }).ToArray();
+            content.Controls.Add(UsageCard(source.Name, Format.Money(source.Total.Cost), ["MODEL", "SPEND", "INPUT", "OUTPUT", "CACHE HIT"], rows));
+        }
+        if (sources.Length > 0 && !sources.Any(s => s.PerModel.Count > 0))
+        {
+            var empty = Card(96);
+            var titleLabel = TextLabel("No usage in this period", 11, true);
+            titleLabel.Location = new Point(S(20), S(20));
+            var help = TextLabel("Try a wider range, or start a session with a supported agent.", 9, muted: true);
+            help.Location = new Point(S(20), S(50));
+            empty.Controls.AddRange([titleLabel, help]);
+            content.Controls.Add(empty);
         }
         if (settings.ShowProjects) RenderProjects();
-        var available = string.Join(", ", sources.Where(s => s.Available).Select(s => s.Name));
-        if (sources.Length > 0) content.Controls.Add(Label("Sources found: " + (available.Length > 0 ? available : "none"), muted: true));
-        ResizeContent(); content.ResumeLayout(true);
-    }
-    private void ResizeContent()
-    {
-        var width = Math.Max(100, content.ClientSize.Width - content.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth);
-        foreach (Control control in content.Controls) if (control is not System.Windows.Forms.Label) control.Width = width;
-    }
-    private DataGridView Grid(params string[] columns)
-    {
-        var grid = new DataGridView { ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
-            AllowUserToResizeRows = false, RowHeadersVisible = false, BorderStyle = BorderStyle.None,
-            BackgroundColor = palette.Background, GridColor = palette.Surface, EnableHeadersVisualStyles = false,
-            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            MultiSelect = false, ScrollBars = ScrollBars.Vertical, Margin = new Padding(0, 0, 0, 20), AccessibleName = columns[0] + " usage" };
-        grid.DefaultCellStyle.BackColor = palette.Background; grid.DefaultCellStyle.ForeColor = palette.Text;
-        grid.DefaultCellStyle.SelectionBackColor = palette.Surface; grid.DefaultCellStyle.SelectionForeColor = palette.Text;
-        grid.ColumnHeadersDefaultCellStyle.BackColor = palette.Surface; grid.ColumnHeadersDefaultCellStyle.ForeColor = palette.Muted;
-        grid.ColumnHeadersHeight = 30; grid.RowTemplate.Height = 28;
-        foreach (var name in columns) grid.Columns.Add(name, name);
-        grid.Columns[0].FillWeight = 250;
-        for (var i = 1; i < columns.Length; i++)
+
+        var found = sources.Where(s => s.Available).Select(s => s.Name).ToArray();
+        if (sources.Length > 0)
         {
-            grid.Columns[i].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
-            grid.Columns[i].HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleRight;
+            var sourceLabel = TextLabel(found.Length > 0 ? "CONNECTED  ·  " + string.Join("  ·  ", found) : "No agent logs found in this profile", 8.5f, muted: true);
+            sourceLabel.Margin = new Padding(S(2), S(3), 0, S(8));
+            content.Controls.Add(sourceLabel);
         }
-        return grid;
+        ResizeContent();
+        content.ResumeLayout(true);
+        content.AutoScrollPosition = new Point(0, scroll);
     }
-    private static void FitGrid(DataGridView grid) => grid.Height = Math.Min(340, grid.ColumnHeadersHeight + grid.Rows.Count * grid.RowTemplate.Height + 2);
+
+    private string DateCaption()
+    {
+        var start = range.Start.LocalDateTime;
+        var end = range.End.LocalDateTime.AddDays(-1);
+        if (range.Period == UsagePeriod.Day) return start.ToString("ddd, MMM d, yyyy");
+        return start.Year == end.Year ? $"{start:MMM d} – {end:MMM d, yyyy}" : $"{start:MMM d, yyyy} – {end:MMM d, yyyy}";
+    }
+
+    private Panel PeriodControls()
+    {
+        var row = new Panel { Height = S(40), Margin = new Padding(0, 0, 0, S(10)) };
+        var periods = new RoundedCard(palette) { Height = S(40), Width = S(312), Radius = 10 };
+        foreach (var period in Enum.GetValues<UsagePeriod>())
+        {
+            var button = new PillButton(period.ToString(), palette, settings.Period == period)
+                { Location = new Point(S(4 + (int)period * 76), S(4)), Size = new Size(S(76), S(32)), Font = UiFont(9, true) };
+            button.Click += (_, _) => { settings.Period = period; SettingsChanged?.Invoke(this, EventArgs.Empty); Render(); };
+            periods.Controls.Add(button);
+        }
+        var styles = new RoundedCard(palette) { Height = S(40), Width = S(158), Radius = 10 };
+        foreach (var relative in new[] { false, true })
+        {
+            var button = new PillButton(relative ? "Rolling" : "Calendar", palette, settings.Relative == relative)
+                { Location = new Point(S(relative ? 79 : 4), S(4)), Size = new Size(S(75), S(32)), Font = UiFont(8.5f) };
+            tooltips.SetToolTip(button, relative ? "Today, last 7 days, last 30 days, or last 12 months" : "Today, this week, this month, or this year");
+            button.Click += (_, _) => { settings.Relative = relative; SettingsChanged?.Invoke(this, EventArgs.Empty); Render(); };
+            styles.Controls.Add(button);
+        }
+        row.Controls.AddRange([periods, styles]);
+        row.Resize += (_, _) => styles.Location = new Point(row.Width - styles.Width, 0);
+        return row;
+    }
+
+    private TableLayoutPanel Metrics(Usage total)
+    {
+        var row = new TableLayoutPanel { Height = S(84), ColumnCount = 3, RowCount = 1, Margin = new Padding(0, 0, 0, S(10)) };
+        for (var i = 0; i < 3; i++) row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / 3));
+        var values = new[] { Format.Tokens(total.Input), Format.Tokens(total.Output), total.HitRate.ToString("P0") };
+        var titles = new[] { "Input tokens", "Output tokens", "Cache hit rate" };
+        var descriptions = new[] { "Fresh input", "Includes reasoning", "Cache read / context" };
+        for (var i = 0; i < 3; i++)
+        {
+            var card = Card(84);
+            card.Dock = DockStyle.Fill;
+            card.Margin = new Padding(i == 0 ? 0 : S(4), 0, i == 2 ? 0 : S(4), 0);
+            var title = TextLabel(titles[i], 8.5f, muted: true); title.Location = new Point(S(14), S(11));
+            var value = TextLabel(values[i], 17, true); value.Location = new Point(S(12), S(30));
+            var description = TextLabel(descriptions[i], 8, muted: true); description.Location = new Point(S(14), S(65));
+            card.Controls.AddRange([title, value, description]);
+            tooltips.SetToolTip(card, i == 2 ? $"{Format.Tokens(total.CacheRead)} cached / {Format.Tokens(total.Context)} context tokens" : titles[i]);
+            row.Controls.Add(card, i, 0);
+        }
+        return row;
+    }
+
+    private RoundedCard UsageCard(string title, string total, string[] columns, UsageRow[] rows)
+    {
+        var card = Card(74 + rows.Length * 44);
+        var titleLabel = TextLabel(title, 11, true); titleLabel.Location = new Point(S(18), S(14));
+        var totalLabel = TextLabel(total, 10, true); totalLabel.ForeColor = palette.Muted;
+        card.Controls.AddRange([titleLabel, totalLabel]);
+        var table = new TableLayoutPanel { Location = new Point(S(18), S(45)), RowCount = rows.Length + 1,
+            ColumnCount = columns.Length, Height = S(22 + rows.Length * 44), Margin = Padding.Empty, Padding = Padding.Empty,
+            BackColor = palette.Surface, CellBorderStyle = TableLayoutPanelCellBorderStyle.None };
+        var widths = columns.Length == 5 ? new[] { 40f, 17f, 14f, 14f, 15f } : [49f, 17f, 17f, 17f];
+        for (var i = 0; i < columns.Length; i++) table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, widths[i]));
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, S(22)));
+        for (var col = 0; col < columns.Length; col++) table.Controls.Add(Cell(columns[col], col == 0, muted: true, header: true), col, 0);
+        for (var r = 0; r < rows.Length; r++)
+        {
+            table.RowStyles.Add(new RowStyle(SizeType.Absolute, S(44)));
+            for (var col = 0; col < columns.Length; col++)
+            {
+                if (col == 0 && rows[r].Secondary is { } secondary)
+                {
+                    var model = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty, BackColor = palette.Surface };
+                    var name = Cell(rows[r].Cells[0], true); name.Dock = DockStyle.Top; name.Height = S(26); name.Font = UiFont(9.5f, true);
+                    var provider = Cell(secondary, true, muted: true); provider.Dock = DockStyle.Bottom; provider.Height = S(18); provider.Font = UiFont(8);
+                    model.Controls.AddRange([name, provider]);
+                    tooltips.SetToolTip(name, rows[r].Tooltip ?? rows[r].Cells[0]);
+                    table.Controls.Add(model, col, r + 1);
+                }
+                else
+                {
+                    Label label;
+                    if (col == 0 && rows[r].Open is { } open)
+                    {
+                        var link = new LinkLabel { Text = rows[r].Cells[col], Dock = DockStyle.Fill, AutoEllipsis = true,
+                            Margin = Padding.Empty, TextAlign = ContentAlignment.MiddleLeft, BackColor = palette.Surface,
+                            LinkColor = palette.Accent, ActiveLinkColor = palette.Accent, VisitedLinkColor = palette.Accent,
+                            LinkBehavior = LinkBehavior.HoverUnderline, AccessibleName = rows[r].Cells[col] };
+                        link.LinkClicked += (_, _) => open();
+                        label = link;
+                    }
+                    else label = Cell(rows[r].Cells[col], col == 0);
+                    label.Font = UiFont(9.5f, col == 1);
+                    tooltips.SetToolTip(label, col == 0 ? rows[r].Tooltip ?? label.Text : label.Text);
+                    table.Controls.Add(label, col, r + 1);
+                }
+            }
+        }
+        card.Controls.Add(table);
+        card.Resize += (_, _) =>
+        {
+            totalLabel.Location = new Point(card.Width - totalLabel.Width - S(18), S(16));
+            table.Width = card.Width - S(36);
+        };
+        return card;
+    }
+    private Label Cell(string text, bool left, bool muted = false, bool header = false) => new()
+    {
+        Text = text, Dock = DockStyle.Fill, Margin = Padding.Empty, AutoEllipsis = true,
+        TextAlign = left ? ContentAlignment.MiddleLeft : ContentAlignment.MiddleRight,
+        Font = UiFont(header ? 7.5f : 9.5f), ForeColor = muted ? palette.Muted : palette.Text,
+        BackColor = palette.Surface, AccessibleName = text
+    };
+    private static string ProviderName(string provider) => provider switch
+    {
+        "openai" => "OpenAI", "anthropic" => "Anthropic", "amazon-bedrock" => "Amazon Bedrock",
+        "openrouter" => "OpenRouter", _ => provider
+    };
+
     private void RenderProjects()
     {
         var sessions = sources.SelectMany(s => s.Sessions.Values.Select(session => (Source: s.Name, Session: session))).ToArray();
-        content.Controls.Add(Label("Projects & sessions", 12, true));
-        var projects = Grid("Project", "Spend", "Tokens", "Sessions");
-        foreach (var project in sessions.GroupBy(s => s.Session.ProjectPath ?? "Unknown project", StringComparer.OrdinalIgnoreCase)
+        var projects = sessions.GroupBy(s => s.Session.ProjectPath ?? "Unknown project", StringComparer.OrdinalIgnoreCase)
             .Select(g => new { Path = g.Key, Total = g.Aggregate(new Usage(), (a, s) => a + s.Session.Total), Count = g.Count() })
-            .OrderByDescending(p => p.Total.Cost).Take(8))
-        {
-            var row = projects.Rows[projects.Rows.Add(Path.GetFileName(project.Path.TrimEnd('\\', '/')), Format.Money(project.Total.Cost), Format.Tokens(project.Total.Context + project.Total.Output), project.Count)];
-            row.Tag = project.Path; row.Cells[0].ToolTipText = project.Path + " (double-click to open)";
-        }
-        projects.CellDoubleClick += (_, e) =>
-        {
-            if (e.RowIndex >= 0 && projects.Rows[e.RowIndex].Tag is string path && Directory.Exists(path))
-                try { Process.Start(new ProcessStartInfo("explorer.exe") { ArgumentList = { path }, UseShellExecute = true }); }
-                catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { SetStatus("Could not open project: " + ex.Message); }
-        };
-        FitGrid(projects); content.Controls.Add(projects);
-        var sessionGrid = Grid("Session", "Agent", "Spend", "Tokens");
-        foreach (var (source, session) in sessions.OrderByDescending(s => s.Session.Total.Cost).Take(8))
-        {
-            var row = sessionGrid.Rows[sessionGrid.Rows.Add(session.Title ?? session.Id, source, Format.Money(session.Total.Cost), Format.Tokens(session.Total.Context + session.Total.Output))];
-            row.Cells[0].ToolTipText = session.Id + "\n" + session.ProjectPath;
-        }
-        FitGrid(sessionGrid); content.Controls.Add(sessionGrid);
+            .OrderByDescending(p => p.Total.Cost).Take(8).Select(p => new UsageRow(
+                [Path.GetFileName(p.Path.TrimEnd('\\', '/')), Format.Money(p.Total.Cost), Format.Tokens(p.Total.Context + p.Total.Output), p.Count.ToString()],
+                Tooltip: p.Path, Open: Directory.Exists(p.Path) ? () => OpenProject(p.Path) : null)).ToArray();
+        content.Controls.Add(UsageCard("Projects", projects.Length + " shown", ["PROJECT", "SPEND", "TOKENS", "SESSIONS"], projects));
+        var sessionRows = sessions.OrderByDescending(s => s.Session.Total.Cost).Take(8).Select(s => new UsageRow(
+            [s.Session.Title ?? s.Session.Id, s.Source, Format.Money(s.Session.Total.Cost), Format.Tokens(s.Session.Total.Context + s.Session.Total.Output)],
+            Tooltip: s.Session.Id + "\n" + s.Session.ProjectPath)).ToArray();
+        content.Controls.Add(UsageCard("Sessions", sessionRows.Length + " shown", ["SESSION", "AGENT", "SPEND", "TOKENS"], sessionRows));
+    }
+    private void OpenProject(string path)
+    {
+        try { Process.Start(new ProcessStartInfo("explorer.exe") { ArgumentList = { path }, UseShellExecute = true }); }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { SetStatus("Could not open project: " + ex.Message); }
+    }
+    private void ResizeContent()
+    {
+        // ClientSize already excludes the native scroll bar. Subtracting it a
+        // second time makes cards change width as the content grows.
+        var width = Math.Max(S(480), content.ClientSize.Width - content.Padding.Horizontal);
+        foreach (Control control in content.Controls) if (control is not Label) control.Width = width;
+    }
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData == Keys.F5) { RefreshRequested?.Invoke(this, EventArgs.Empty); return true; }
+        return base.ProcessCmdKey(ref msg, keyData);
     }
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        if (disposing) { foreach (var font in labelFonts.Values) font.Dispose(); labelFonts.Clear(); }
+        if (disposing) { tooltips.Dispose(); foreach (var font in fonts.Values) font.Dispose(); fonts.Clear(); }
     }
-}
-
-internal sealed class SpendGraph(double[] values, string[] labels, Palette palette) : Control
-{
-    private readonly ToolTip tooltip = new();
-    private int hovered = -1;
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        base.OnPaint(e);
-        e.Graphics.Clear(palette.Background);
-        var max = values.DefaultIfEmpty(0).Max();
-        using var brush = new SolidBrush(palette.Accent);
-        using var text = new SolidBrush(palette.Muted);
-        e.Graphics.DrawString("Spend " + (max > 0 ? "· peak " + Format.Money(max) : "· no recorded spend"), Font, text, 0, 0);
-        var step = Width / (float)Math.Max(1, values.Length);
-        for (var i = 0; i < values.Length; i++)
-        {
-            var height = max > 0 ? (float)(values[i] / max * (Height - 50)) : 0;
-            e.Graphics.FillRectangle(brush, i * step + 2, Height - 25 - height, Math.Max(1, step - 4), height);
-            if (i == 0 || i == values.Length / 2 || i == values.Length - 1)
-            {
-                var size = e.Graphics.MeasureString(labels[i], Font);
-                e.Graphics.DrawString(labels[i], Font, text, Math.Clamp(i * step, 0, Math.Max(0, Width - size.Width)), Height - 20);
-            }
-        }
-    }
-    protected override void OnMouseMove(MouseEventArgs e)
-    {
-        base.OnMouseMove(e);
-        var index = Math.Clamp((int)(e.X / (float)Math.Max(1, Width) * values.Length), 0, Math.Max(0, values.Length - 1));
-        if (index != hovered && values.Length > 0) { hovered = index; tooltip.SetToolTip(this, labels[index] + ": " + Format.Money(values[index])); }
-    }
-    protected override void Dispose(bool disposing) { if (disposing) tooltip.Dispose(); base.Dispose(disposing); }
+    private sealed record UsageRow(string[] Cells, string? Secondary = null, string? Tooltip = null, Action? Open = null);
 }

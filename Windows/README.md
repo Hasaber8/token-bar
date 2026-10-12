@@ -19,6 +19,11 @@ graph, projects and sessions, theme, refresh, and quit. Closing the dashboard
 keeps the tray app running. Windows may initially place the icon in the tray's
 overflow menu.
 
+The dashboard uses metric cards, segmented period controls, a chart with dollar
+gridlines, and model rows with provider labels and tooltips for long names.
+System theme follows the Windows app appearance. Use the Refresh button or F5
+to rescan immediately, or start with `TokenBar.exe --show` to open the dashboard.
+
 For start at login, press Win+R, enter `shell:startup`, and place a shortcut to
 `TokenBar.exe` in that folder.
 
@@ -38,7 +43,7 @@ unreadable log or database is reported in the dashboard. Settings live in
 
 This initial Windows port includes spend graphs, per-model usage, all named
 color themes, and optional project/session summaries. Project rows open Explorer
-on double-click. Session resume buttons, screenshot export, provider badges,
+when clicked. Session resume buttons, screenshot export, provider logos,
 and the experimental cat animation are currently macOS-only. Windows tray icons
 show totals in a tooltip; they cannot display the macOS menu bar's inline text.
 
@@ -79,8 +84,9 @@ Build output is `dist/TokenBar-win-x64/TokenBar.exe`, alongside
 `token-bar-cli.exe`, licenses, and a versioned ZIP. The build script reads the
 version from the existing macOS source so pricing releases stay in sync.
 The scanner tests use isolated JSONL and SQLite fixtures without agent installs
-or paid model requests. The UI smoke check creates and renders a dashboard
-without registering a tray icon or showing a window.
+or paid model requests. The UI smoke check renders light, dark, compact, and
+empty dashboards offscreen, checks for clipping and horizontal scrolling,
+and registers no tray icon.
 
 The Windows core is a C# port of `Sources/TokenBarCore/TokenBarCore.swift`.
 Changes to scanner formats or pricing rules should update both implementations

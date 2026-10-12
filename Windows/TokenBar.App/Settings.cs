@@ -55,7 +55,19 @@ internal record Palette(Color Background, Color Surface, Color Text, Color Muted
             "Solarized Light" => [0xfdf6e3, 0xeee8d5, 0x657b83, 0x839496, 0x268bd2],
             _ => null
         };
-        return colors is null ? new(SystemColors.Window, SystemColors.Control, SystemColors.WindowText, SystemColors.GrayText, SystemColors.Highlight)
+        return colors is null ? SystemPalette()
             : new(C(colors[0]), C(colors[1]), C(colors[2]), C(colors[3]), C(colors[4]));
+    }
+    private static Palette SystemPalette()
+    {
+        var dark = false;
+        try
+        {
+            using var preferences = Microsoft.Win32.Registry.CurrentUser.OpenSubKey("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize");
+            dark = preferences?.GetValue("AppsUseLightTheme") is int value && value == 0;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException) { }
+        return dark ? new(Color.FromArgb(24, 27, 33), Color.FromArgb(32, 36, 44), Color.FromArgb(236, 239, 244), Color.FromArgb(159, 169, 184), Color.FromArgb(116, 169, 255))
+            : new(Color.FromArgb(246, 248, 251), Color.White, Color.FromArgb(24, 34, 50), Color.FromArgb(100, 113, 132), Color.FromArgb(37, 99, 235));
     }
 }

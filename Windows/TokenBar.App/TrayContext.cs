@@ -19,11 +19,12 @@ internal sealed class TrayContext : ApplicationContext
     private DateTime lastScan = DateTime.MinValue;
     private bool scanning, disposed;
 
-    public TrayContext()
+    public TrayContext(bool showDashboard = false)
     {
         dashboard = new(settings);
         _ = dashboard.Handle; // Marshal all watcher notifications through a UI handle.
         dashboard.SettingsChanged += (_, _) => { SaveSettings(); BuildMenu(); Interlocked.Increment(ref requested); };
+        dashboard.RefreshRequested += (_, _) => Interlocked.Increment(ref requested);
         dashboard.Icon = trayIcon;
         tray = new() { Icon = trayIcon, Text = "Token Bar: loading usage…", Visible = true, ContextMenuStrip = menu };
         tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowDashboard(); };
@@ -31,6 +32,7 @@ internal sealed class TrayContext : ApplicationContext
         SystemEvents.UserPreferenceChanged += AppearanceChanged;
         timer.Tick += async (_, _) => await RefreshAsync();
         timer.Start();
+        if (showDashboard) ShowDashboard();
     }
 
     private void BuildMenu()
@@ -80,6 +82,7 @@ internal sealed class TrayContext : ApplicationContext
         if (!dashboard.Visible)
         {
             var area = Screen.FromPoint(Cursor.Position).WorkingArea;
+            dashboard.Height = Math.Min(dashboard.Height, area.Height - 24);
             dashboard.Location = new Point(Math.Max(area.Left, area.Right - dashboard.Width - 12), Math.Max(area.Top, area.Bottom - dashboard.Height - 12));
             dashboard.Show();
         }
