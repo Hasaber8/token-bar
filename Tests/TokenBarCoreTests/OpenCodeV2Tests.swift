@@ -160,6 +160,26 @@ final class OpenCodeV2Tests: FixtureTestCase {
         XCTAssertEqual(stats.sessions["legacy"]?.agg.input, 100)
     }
 
+    func testV1WithPlaceholderMessageTableStillReadsLegacyUsage() throws {
+        try makeDB()
+        try execute("DROP TABLE session_v2")
+        try execute("CREATE TABLE session (id text PRIMARY KEY, directory text, title text)")
+        try execute("INSERT INTO session VALUES ('legacy', ?, 'V1 session')", values: [tmp.path])
+        try execute("CREATE TABLE message (id text PRIMARY KEY, session_id text, time_created integer, data text)")
+        let legacy = """
+            {"role":"assistant","providerID":"openai","modelID":"gpt-test","tokens":{"input":1000,"output":300,"reasoning":45,"cache":{"read":234}}}
+            """
+        let ms = Int64(dayStart.addingTimeInterval(10).timeIntervalSince1970 * 1000)
+        try execute("INSERT INTO message VALUES ('old', 'legacy', \(ms), ?)", values: [legacy])
+        // OpenCode 1.19.3 has session_message, but no session_v2 or V2 usage.
+        let stats = scanOpenCode(since: dayStart, dbPath: dbURL, catalog: nil)
+        XCTAssertTrue(stats.available)
+        XCTAssertEqual(stats.perModel["openai/gpt-test"]?.input, 1000)
+        XCTAssertEqual(stats.agg.output, 345)
+        XCTAssertEqual(stats.agg.cacheRead, 234)
+        XCTAssertEqual(stats.sessions["legacy"]?.title, "V1 session")
+    }
+
     func testEmptyV2DatabaseHasNoDataSince() throws {
         try makeDB()
         let stats = scanOpenCode(since: dayStart, dbPath: dbURL)

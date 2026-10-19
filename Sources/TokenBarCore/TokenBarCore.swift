@@ -876,6 +876,9 @@ public func scanOpenCode(since dayStart: Date, dbPath: URL = openCodeDBPath,
     let messageTables = ["message", "session_message"].filter {
         !sqliteColumns(db!, table: $0).isEmpty
     }
+    // V1 can create an empty session_message table before adopting V2 storage.
+    let hasV2 = messageTables.contains("session_message")
+        && !sqliteColumns(db!, table: "session_v2").isEmpty
     for table in messageTables {
         var minStmt: OpaquePointer?
         if sqlite3_prepare_v2(db, "SELECT MIN(time_created) FROM \"\(table)\"", -1, &minStmt, nil) == SQLITE_OK,
@@ -895,12 +898,12 @@ public func scanOpenCode(since dayStart: Date, dbPath: URL = openCodeDBPath,
     var queries: [String] = []
     if messageTables.contains("message") {
         var legacy = "SELECT id, session_id, time_created, data, NULL AS kind, 0 AS version FROM message"
-        if messageTables.contains("session_message") {
+        if hasV2 {
             legacy += " WHERE NOT EXISTS (SELECT 1 FROM session_v2 s WHERE s.id = message.session_id)"
         }
         queries.append(legacy)
     }
-    if messageTables.contains("session_message") {
+    if hasV2 {
         queries.append("""
             SELECT m.id, m.session_id, m.time_created, m.data, m.type AS kind, 1 AS version
             FROM session_message m JOIN session_v2 s ON s.id = m.session_id
