@@ -2237,13 +2237,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         if panelSize != panel.frame.size { panel.setFrameSize(panelSize) }
 
         // Full-size content paints the native chevron, while the safe area keeps
-        // controls out of the chevron and rounded corners. Include those insets
-        // in the outer size so they do not clip or silently shorten the panel.
+        // controls out of the chevron and rounded corners. AppKit may already
+        // add that chrome outside contentSize; do not reserve it twice.
         let safeInsets = panelContentView?.safeAreaInsets ?? NSEdgeInsets()
-        let horizontalChrome = safeInsets.left + safeInsets.right
-        let verticalChrome = safeInsets.top + safeInsets.bottom
+        let frameSize = panelContentView?.frame.size ?? panelPopover.contentSize
+        let nativeWidth = max(0, frameSize.width - panelPopover.contentSize.width)
+        let nativeHeight = max(0, frameSize.height - panelPopover.contentSize.height)
+        let horizontalChrome = max(0, safeInsets.left + safeInsets.right - nativeWidth)
+        let verticalChrome = max(0, safeInsets.top + safeInsets.bottom - nativeHeight)
         let visiblePanelHeight = min(panelSize.height,
-                                     max(1, maximumPanelHeight() - verticalChrome))
+                                     max(1, maximumPanelHeight() - verticalChrome - nativeHeight))
         panelScrollView?.hasVerticalScroller = panelSize.height > visiblePanelHeight + 0.5
         let popoverSize = NSSize(width: panelSize.width + horizontalChrome,
                                  height: visiblePanelHeight + verticalChrome)
