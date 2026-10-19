@@ -2247,9 +2247,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         panelScrollView?.hasVerticalScroller = panelSize.height > visiblePanelHeight + 0.5
         let popoverSize = NSSize(width: panelSize.width + horizontalChrome,
                                  height: visiblePanelHeight + verticalChrome)
-        if panelPopover.contentViewController?.preferredContentSize != popoverSize {
-            panelPopover.contentViewController?.preferredContentSize = popoverSize
-        }
+        // Let the popover size its full-size content view. Setting the
+        // controller's preferred size as well can shrink it inside the chrome.
         if panelPopover.contentSize != popoverSize {
             panelPopover.contentSize = popoverSize
         }
